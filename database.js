@@ -1,7 +1,8 @@
 const { createClient } = require('@supabase/supabase-js');
 
-const supabaseUrl = process.env.SUPABASE_URL || 'https://wgjhijtfhqtkdgddtcwh.supabase.co';
-const supabaseKey = process.env.SUPABASE_ANON_KEY || 'sb_publishable_4JkQtzY24ldcGfE7BcZs0Q_hdN1Ms-e';
+// 直接使用正确的 Supabase 凭据（忽略环境变量，避免配置错误）
+const supabaseUrl = 'https://wgjhijtfhqtkdgddtcwh.supabase.co';
+const supabaseKey = 'sb_publishable_4JkQtzY24ldcGfE7BcZs0Q_hdN1Ms-e';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // ==================== 口令操作 ====================
