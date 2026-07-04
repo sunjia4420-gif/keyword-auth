@@ -96,8 +96,29 @@ app.post('/api/verify', async (req, res) => {
   try {
     const pwd = await findPasswordByValue(password.trim());
     
+    // 调试：返回详细信息
     if (!pwd) {
-      return res.json({ success: false, message: '口令错误' });
+      // 尝试直接查询看是否是连接问题
+      const { createClient } = require('@supabase/supabase-js');
+      const testClient = createClient(
+        process.env.SUPABASE_URL || 'https://wgjhijtfhqtkdgddtcwh.supabase.co',
+        process.env.SUPABASE_ANON_KEY || 'sb_publishable_4JkQtzY24ldcGfE7BcZs0Q_hdN1Ms-e'
+      );
+      const { data: rawData, error: rawError } = await testClient
+        .from('passwords')
+        .select('id,password,is_active')
+        .eq('password', password.trim());
+      return res.json({ 
+        success: false, 
+        message: '口令错误',
+        debug: {
+          envUrl: process.env.SUPABASE_URL ? '(set)' : '(default)',
+          envKey: process.env.SUPABASE_ANON_KEY ? '(set)' : '(default)',
+          rawError: rawError ? rawError.message : null,
+          rawData: rawData,
+          searchingFor: password.trim()
+        }
+      });
     }
     
     if (pwd.is_active !== 1) {
