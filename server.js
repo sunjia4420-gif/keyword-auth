@@ -16,6 +16,7 @@ const {
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const TOOL_NAME = process.env.TOOL_NAME || 'keyword'; // 当前工具名称
 
 // 中间件
 app.use(express.json());
@@ -102,6 +103,11 @@ app.post('/api/verify', async (req, res) => {
     
     if (pwd.is_active !== 1) {
       return res.json({ success: false, message: '口令已禁用' });
+    }
+    
+    // 检查工具权限
+    if (pwd.allowed_tools && !pwd.allowed_tools.includes(TOOL_NAME)) {
+      return res.json({ success: false, message: '该口令无权访问此工具' });
     }
     
     // 检查过期
