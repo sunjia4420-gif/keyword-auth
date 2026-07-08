@@ -1,5 +1,6 @@
 const express = require('express');
 const session = require('express-session');
+const compression = require('compression');
 const path = require('path');
 const { 
   findPasswordByValue, 
@@ -21,13 +22,17 @@ const TOOL_NAME = process.env.TOOL_NAME || 'keyword'; // 当前工具名称
 // 中间件
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(compression()); // gzip 压缩
 app.use(session({
   secret: process.env.SESSION_SECRET || 'keyword-auth-secret-2026',
   resave: false,
   saveUninitialized: false,
   cookie: { maxAge: 24 * 60 * 60 * 1000 }
 }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+  maxAge: '1d',
+  etag: true
+}));
 
 // ==================== 认证中间件 ====================
 function requireAuth(req, res, next) {
