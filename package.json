@@ -1,12 +1,13 @@
 {
   "name": "keyword-auth",
-  "version": "1.0.0",
-  "description": "关键词分类器 - 带口令保护的网页工具",
+  "version": "1.1.0",
+  "description": "关键词分类器 - 带口令保护的网页工具 + gzip压缩",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
+    "compression": "^1.7.4",
     "express": "^4.18.2",
     "express-session": "^1.17.3",
     "@supabase/supabase-js": "^2.39.3"
