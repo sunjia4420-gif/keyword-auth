@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>关键词词组标签工具 v1.0</title>
+<title>关键词词组标签工具 v2.0</title>
 <style>
 /* ============================================================
    基础变量与全局样式
@@ -239,7 +239,7 @@ td.kw { min-width: 220px; max-width: 420px; word-break: break-word; }
      顶栏
      ============================================================ -->
 <div class="topbar">
-  <h1>🏷️ 关键词词组标签工具 <span class="sub">v1.0 · 亚马逊服装词组语义打标</span></h1>
+  <h1>🏷️ 关键词词组标签工具 <span class="sub">v2.0 · 亚马逊服装词组语义打标</span></h1>
   <div class="topbar-actions">
     <button class="btn" onclick="openHelp()">📖 使用说明</button>
     <button class="btn" onclick="saveConfig()">💾 保存配置</button>
@@ -273,6 +273,34 @@ td.kw { min-width: 220px; max-width: 420px; word-break: break-word; }
     </div>
     <div id="colMapNotice" class="warn-b" style="display:none; margin-top:8px;"></div>
     <div id="phrasePreview" style="margin-top:10px; max-height:120px; overflow-y:auto;"></div>
+  </div>
+</div>
+
+<!-- ============================================================
+     1B. 竞品词批量导入合并（新增导入路径）
+     ============================================================ -->
+<div class="card" id="compCard">
+  <div class="card-h">
+    <span>①B 竞品词批量导入合并</span>
+    <div class="h-actions">
+      <span class="hint">合并工作数据集 <b id="compRowCount" style="color:var(--accent);font-size:15px;">0</b> 行</span>
+      <button class="btn" onclick="compPickFiles()">📁 选择文件 (多文件)</button>
+      <button class="btn btn-primary" onclick="compParseClick()">解析词组</button>
+      <button class="btn" onclick="exportMergedCompetitor()">⬇ 导出合并过程</button>
+    </div>
+  </div>
+  <div class="card-b">
+    <div class="hint" style="margin-bottom:6px;">
+      支持多文件（Helium 10 / Cerebro / AMZ123 / 其它来源）的 <b>xlsx / xls / csv / txt</b>。自动识别列 → 跨文件按词组合并
+      （<b>不去重、只标记重复</b>）→ 确认列映射 → 解析（年份替换 + 精简列）→ 喂给「③ 开始计算」打标。
+    </div>
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:8px;">
+      <label class="inline">目标年份：
+        <input type="number" id="compTargetYear" min="1900" max="2099" style="width:92px; display:inline-block;">
+      </label>
+      <span class="hint">年份替换：把关键词中的独立 4 位年份（如 2019）替换为目标年，已是目标年则跳过。存于 localStorage（kwTag_ 前缀）。</span>
+    </div>
+    <div id="compNote" class="warn-b" style="display:none;"></div>
   </div>
 </div>
 
@@ -374,6 +402,7 @@ td.kw { min-width: 220px; max-width: 420px; word-break: break-word; }
       <input type="text" id="searchBox" placeholder="🔍 搜索词组（子串匹配）" style="width:260px;" oninput="onSearchInput()">
       <button class="btn" id="btnUntagged" onclick="toggleUntagged()">🕳 未打标词组 (0)</button>
       <button class="btn" id="btnLogic" onclick="toggleLogic()" title="多标签筛选的逻辑关系">标签逻辑：OR（任一命中）</button>
+      <input type="number" id="minRepeatInput" min="0" placeholder="重复次数≥" style="width:110px;" oninput="onMinRepeatInput()" title="按重复次数筛选（仅竞品合并数据有效）">
       <button class="btn btn-sm" onclick="clearFilters()">清除筛选</button>
     </div>
     <div id="filterTagChips" style="margin-bottom:10px;"></div>
@@ -393,10 +422,15 @@ td.kw { min-width: 220px; max-width: 420px; word-break: break-word; }
             <th class="sortable" onclick="sortBy('adRank')" id="th_adRank">广告排名</th>
             <th class="sortable" onclick="sortBy('naturalRank')" id="th_naturalRank">自然排名</th>
             <th class="sortable" onclick="sortBy('repeat')" id="th_repeat">重复</th>
+            <th class="sortable" onclick="sortBy('repeatCount')" id="th_repeatCount">重复次数</th>
+            <th class="sortable" onclick="sortBy('repeatCount80')" id="th_repeatCount80">80重复次数</th>
+            <th class="sortable" onclick="sortBy('repeatRatio80')" id="th_repeatRatio80">80重复比</th>
+            <th style="min-width:140px;">来源</th>
+            <th class="sortable" onclick="sortBy('isDuplicate')" id="th_isDuplicate">是否重复</th>
           </tr>
         </thead>
         <tbody id="resultBody">
-          <tr><td colspan="10" style="text-align:center; color:var(--text-muted); padding:26px;">暂无数据 —— 请先导入词组并点击「开始计算」</td></tr>
+          <tr><td colspan="15" style="text-align:center; color:var(--text-muted); padding:26px;">暂无数据 —— 请先导入词组并点击「开始计算」</td></tr>
         </tbody>
       </table>
     </div>
@@ -421,6 +455,7 @@ td.kw { min-width: 220px; max-width: 420px; word-break: break-word; }
 <input type="file" id="tagLibFileInput" accept=".json" style="display:none" onchange="importTagLibFile(event)">
 <input type="file" id="catWordsFileInput" accept=".txt" style="display:none" onchange="importCatWordsFile(event)">
 <input type="file" id="configFileInput" accept=".json" style="display:none" onchange="loadConfigFile(event)">
+<input type="file" id="compFileInput" accept=".xlsx,.xls,.csv,.txt" multiple style="display:none" onchange="compHandleFiles(event)">
 
 <!-- ============================================================
      列映射弹窗
@@ -455,7 +490,8 @@ td.kw { min-width: 220px; max-width: 420px; word-break: break-word; }
     <div class="modal-b">
       <h4>三步流程</h4>
       <ul>
-        <li><b>① 导入词组</b>：粘贴文本（每行一个）或导入 txt / xlsx / xls。Excel 会弹出列映射窗口，确认「关键词词组」列即可；搜索量、竞品数、CPR、广告排名、自然排名、重复 会自动识别中英文表头，未识别的按 0 处理。导入后按词组文本小写自动去重，保留第一条。</li>
+        <li><b>①A 竞品词批量导入合并（多文件）</b>：点「①B 竞品词批量导入合并」→「📁 选择文件 (多文件)」选 H10 Cerebro / AMZ123 等导出的多个 xlsx/csv/txt。系统按「关键词词组」列自动合并<b>不去重</b>，只标记重复（重复次数 / 是否重复 / 来源文件）；自然排名 ≤80 的出现次数记作「80重复次数」，其与重复次数的比值记作「80重复比」（若该词组只出现 1 次则比值记为 0）。弹窗确认列映射后可直接「解析词组」做<b>年份归一</b>（默认目标年 2026，可在卡片内修改），再进入第③步打标。</li>
+        <li><b>①B 普通导入词组（单文件）</b>：粘贴文本（每行一个）或导入单个 txt / xlsx / xls。Excel 会弹出列映射窗口，确认「关键词词组」列即可；搜索量、竞品数、CPR、广告排名、自然排名、重复 会自动识别中英文表头，未识别的按 0 处理。导入后按词组文本小写自动去重，保留第一条。（该路径无跨文件重复统计，「80重复比」列显示「—」表示不适用。）</li>
         <li><b>② 维护标签词库</b>：左侧选分类，右侧编辑词条（每行一个），改完点「保存词条」。可增删分类、改名、改色、停用、写备注。</li>
         <li><b>③ 开始计算</b>：点「开始计算」，分批处理并显示进度，可随时停止。计算完在下方表格查看结果，并可按标签 / 关键词 / 未打标筛选，最后导出 CSV。</li>
       </ul>
@@ -471,6 +507,7 @@ td.kw { min-width: 220px; max-width: 420px; word-break: break-word; }
       <ul>
         <li><b>宽表 CSV</b>：每个标签分类独占一列，命中填 1、未命中填 0。丢进 Excel 直接做数据透视表 / 筛选 / 交叉统计，适合分析「哪些维度覆盖不足」。</li>
         <li><b>长表 CSV</b>：标签用逗号拼在一列里，另附命中明细，适合快速人工浏览、贴回原有工作表。</li>
+        <li>两种导出都在标准列之后附带<b>重复统计列</b>：重复次数、80重复次数、80重复比（导出原始小数，便于 Excel 计算）、来源文件（多文件用「|」分隔）、是否重复。</li>
         <li>两种导出都<b>遵循当前筛选结果</b>（筛了未打标就只导未打标），都带 UTF-8 BOM，Excel 打开不乱码。</li>
       </ul>
 
@@ -489,7 +526,7 @@ td.kw { min-width: 220px; max-width: 420px; word-break: break-word; }
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
 /* ============================================================
- * 关键词词组标签工具 v1.0
+ * 关键词词组标签工具 v2.0
  * 单文件 · 原生 JS · 除 SheetJS CDN 外零依赖
  * ============================================================ */
 
@@ -514,6 +551,7 @@ td.kw { min-width: 220px; max-width: 420px; word-break: break-word; }
 var LS_TAGS    = 'kwTag_tags';
 var LS_COLMAP  = 'kwTag_colmap';
 var LS_OPTS    = 'kwTag_opts';
+var LS_REPLACE_YEAR = 'kwTag_replaceYear';   // 竞品年份替换目标年（1900-2099，默认 2026）
 
 var PAGE_SIZE  = 50;
 var BATCH_SIZE = 500;
@@ -540,15 +578,34 @@ var isStale = false;
 var singularOn = true;
 
 /** 筛选与排序 */
-var filterState = { search: '', untaggedOnly: false, tags: [], logic: 'OR' };
+var filterState = { search: '', untaggedOnly: false, tags: [], logic: 'OR', minRepeat: 0 };
 var sortState = { key: 'id', dir: 'asc' };
 var currentPage = 1;
 
 /** Excel 列映射临时数据 */
 var _colMapRows = null;
+/** 列映射弹窗当前使用的字段定义（标准路径=COLMAP_FIELDS，竞品路径=COMP_FIELDS） */
+var _colMapFields = null;
+/** 列映射弹窗模式：'standard' 既有单文件导入 | 'competitor' 竞品多文件合并 */
+var _colMapMode = 'standard';
 
 /** SheetJS 是否可用 */
 var xlsxReady = false;
+
+/* ============================================================
+ * 竞品词批量导入合并 —— 新增导入路径的独立状态
+ * 与既有「① 词组导入」完全解耦：既有单文件/txt 导入逻辑一行不改，
+ * 竞品路径只把最终结果写入统一的 phrases 工作数据集并扩展字段。
+ * ============================================================ */
+var compState = {
+  rows: [],          // 以首个文件表头为基准对齐后的全部原始行（[0]=表头，其后每行一个数组）
+  merged: [],        // 合并中间结果（与 rows[1..] 一一对应，用于跨文件来源 provenance）
+  headers: [],       // 当前生效表头（解析精简列后会变化）
+  columnMap: {},     // 当前生效 字段->列下标 映射
+  firstHeaders: [],  // 首个文件表头（导出基准）
+  firstColumnMap: {},// 首个文件自动识别映射（导出基准）
+  rawData: []        // [headers, ..._rawRow]，供导出透传
+};
 
 /** 默认标签词库（亚马逊美区服装场景） */
 function defaultTagData() {
@@ -919,6 +976,32 @@ var COLMAP_FIELDS = [
               'frequency', 'occurrence'] }
 ];
 
+/*
+ * 竞品词多文件合并用的字段定义（移植规格 §3.1）。
+ * 与 COLMAP_FIELDS 不同：它多了 searchTrend / searchFreqRank / rankChange / isDuplicate，
+ * 且没有 adRank。仅用于竞品路径的自动识别与列映射弹窗，绝不改动既有 COLMAP_FIELDS。
+ */
+var COMP_FIELDS = [
+  { key: 'phrase', label: '关键词词组', required: true,
+    aliases: ['关键词', '词组', '词', 'keyword', 'search term', '搜索词'] },
+  { key: 'searchVolume', label: '搜索量', required: false,
+    aliases: ['搜索量', 'search volume', 'volume', 'search demand', 'monthly search volume'] },
+  { key: 'searchTrend', label: '搜索量趋势', required: false,
+    aliases: ['趋势', 'trend'] },
+  { key: 'competitorCount', label: '竞品数', required: false,
+    aliases: ['竞品', 'competitor', '竞争', 'competitors'] },
+  { key: 'cpr', label: 'CPR', required: false,
+    aliases: ['CPR', 'cpr'] },
+  { key: 'naturalRank', label: '自然排名', required: false,
+    aliases: ['自然排名', 'natural rank', 'organic rank', 'rank'] },
+  { key: 'isDuplicate', label: '重复', required: false,
+    aliases: ['重复', 'duplicate'] },
+  { key: 'searchFreqRank', label: '搜索频率排名', required: false,
+    aliases: ['搜索频率排名', '本周排名', '频率排名', 'search frequency rank', 'sfr'] },
+  { key: 'rankChange', label: '排名变化', required: false,
+    aliases: ['排名变化', '排名涨幅', '排名变动', '变化', '涨幅', 'rank change', 'change', 'delta', '上周排名'] }
+];
+
 /** 根据表头自动构建 字段 -> 列索引 映射 */
 function buildColumnMap(header) {
   var normed = [];
@@ -949,7 +1032,9 @@ function buildColumnMap(header) {
   return { map: map, unmatched: unmatched };
 }
 
-function openColMapModal(rows, header, initialMap) {
+function openColMapModal(rows, header, initialMap, fields, mode) {
+  _colMapFields = fields || COLMAP_FIELDS;
+  _colMapMode = mode || 'standard';
   _colMapRows = rows;
   var container = document.getElementById('colMapRows');
   if (!container) return;
@@ -957,12 +1042,12 @@ function openColMapModal(rows, header, initialMap) {
   for (var i = 0; i < header.length; i++) {
     var hname = (header[i] == null || header[i] === '') ? '(空列)' : String(header[i]);
     var sel = '';
-    for (var fi = 0; fi < COLMAP_FIELDS.length; fi++) {
-      if (initialMap[COLMAP_FIELDS[fi].key] === i) { sel = COLMAP_FIELDS[fi].key; break; }
+    for (var fi = 0; fi < _colMapFields.length; fi++) {
+      if (initialMap[_colMapFields[fi].key] === i) { sel = _colMapFields[fi].key; break; }
     }
     var opts = '<option value="">忽略</option>';
-    for (var fj = 0; fj < COLMAP_FIELDS.length; fj++) {
-      var f = COLMAP_FIELDS[fj];
+    for (var fj = 0; fj < _colMapFields.length; fj++) {
+      var f = _colMapFields[fj];
       opts += '<option value="' + f.key + '"' + (sel === f.key ? ' selected' : '') + '>'
         + escapeHtml(f.label) + (f.required ? '（必填）' : '') + '</option>';
     }
@@ -990,12 +1075,13 @@ function closeColMapModal() {
 }
 
 function updateColMapWarn() {
+  var fields = _colMapFields || COLMAP_FIELDS;
   var selects = document.querySelectorAll('#colMapRows select');
   var confirmed = {};
   for (var i = 0; i < selects.length; i++) { if (selects[i].value) confirmed[selects[i].value] = true; }
   var unmatched = [];
-  for (var fi = 0; fi < COLMAP_FIELDS.length; fi++) {
-    var f = COLMAP_FIELDS[fi];
+  for (var fi = 0; fi < fields.length; fi++) {
+    var f = fields[fi];
     if (!f.required && !confirmed[f.key]) unmatched.push(f.label);
   }
   var warn = document.getElementById('colMapWarn');
@@ -1010,6 +1096,7 @@ function updateColMapWarn() {
 
 function confirmColMap() {
   if (!_colMapRows) { closeColMapModal(); return; }
+  if (_colMapMode === 'competitor') { confirmCompetitorColMap(); return; }
   var selects = document.querySelectorAll('#colMapRows select');
   var confirmed = {};
   for (var i = 0; i < selects.length; i++) {
@@ -1110,6 +1197,477 @@ function resetResultsState() {
   renderFilterChips();
   renderTable();
   renderTagCats();
+}
+
+/* ============================================================
+ * 【区块 2B】竞品词批量导入合并（新增导入路径）
+ * 完全独立于「① 词组导入」，仅把最终结果写入统一 phrases 工作数据集，
+ * 并扩展 repeatCount / repeatCount80 / sources / isDuplicate 字段。
+ * 设计口径严格遵循《竞品词导入合并解析_移植规格.md》：
+ *   - 合并不去重，只标记 isDuplicate / repeatCount / repeatCount80
+ *   - naturalRank 的 null（无数据）与 0（排第 0）严格区分
+ *   - 展示保留原始大小写，仅 key 归一
+ *   - 年份正则仅匹配独立 4 位年份
+ *   - 字段缺失为 null 而非 0 / ''
+ * ============================================================ */
+
+/** 数值单元格转数字，缺失/空/'-'/非法 → null（区别于现有 numOr0 的 0） */
+function numOrNull(v) {
+  if (v === '' || v == null) return null;
+  var s;
+  if (typeof v === 'string') {
+    s = v.replace(/,/g, '').trim();
+    if (s === '' || s === '-') return null;
+  } else {
+    s = String(v);
+  }
+  var n = parseFloat(s);
+  return isNaN(n) ? null : n;
+}
+
+/** 合并用词组归一：trim → 小写 → 折叠连续空格（展示保留原始大小写，仅 key 归一） */
+function mergeKeyNorm(s) {
+  return String(s == null ? '' : s).trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+/** 把一行按「文件表头」取值，对齐到「基准表头」（按表头名匹配，不在基准中的列丢弃） */
+function alignRowToBase(row, fileHeaders, baseHeaders) {
+  var fmap = {};
+  for (var i = 0; i < (fileHeaders || []).length; i++) {
+    var k = normHeader(fileHeaders[i]);
+    if (k && fmap[k] === undefined) fmap[k] = i;
+  }
+  var out = [];
+  for (var b = 0; b < (baseHeaders || []).length; b++) {
+    var bk = normHeader(baseHeaders[b]);
+    out.push((bk && fmap[bk] !== undefined) ? (row[fmap[bk]]) : '');
+  }
+  return out;
+}
+
+/** 极简 CSV 解析（支持引号包裹与转义双引号），供 SheetJS 不可用时的 csv 降级 */
+function parseCSVText(text) {
+  text = String(text == null ? '' : text).replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  var rows = [], row = [], field = '', i = 0, inQ = false, c;
+  while (i < text.length) {
+    c = text.charAt(i);
+    if (inQ) {
+      if (c === '"') { if (text.charAt(i + 1) === '"') { field += '"'; i++; } else inQ = false; }
+      else field += c;
+    } else {
+      if (c === '"') inQ = true;
+      else if (c === ',') { row.push(field); field = ''; }
+      else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+      else field += c;
+    }
+    i++;
+  }
+  if (field !== '' || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+
+/** 竞品列自动识别（规格 §3.1）：中英文别名模糊（子串）匹配，命中返回下标否则 -1 */
+function autoMatchColumns(headers) {
+  var low = (headers || []).map(function (h) { return String(h == null ? '' : h).toLowerCase().trim(); });
+  var map = {}, used = {};
+  for (var fi = 0; fi < COMP_FIELDS.length; fi++) {
+    var f = COMP_FIELDS[fi], hit = -1;
+    for (var i = 0; i < low.length; i++) {
+      if (used[i]) continue;
+      var h = low[i];
+      if (!h) continue;
+      for (var ai = 0; ai < f.aliases.length; ai++) {
+        var a = String(f.aliases[ai]).toLowerCase().trim();
+        if (a && h.indexOf(a) !== -1) { hit = i; break; }
+      }
+      if (hit >= 0) break;
+    }
+    if (hit >= 0) { map[f.key] = hit; used[hit] = true; }
+    else map[f.key] = -1;
+  }
+  return map;
+}
+
+/** 单个表格文件读取：xlsx/xls 走 SheetJS；csv 优先 SheetJS 否则手动；txt 单列为词组 */
+function readOneTableFile(file, cb) {
+  var name = (file.name || '').toLowerCase();
+  function finish(rows) {
+    if (!rows || rows.length === 0) { cb('文件为空或无法解析：' + file.name, null); return; }
+    cb(null, { name: file.name, headers: (rows[0] || []), rows: rows });
+  }
+  if (/\.(xlsx|xls)$/.test(name)) {
+    if (!xlsxReady) { cb('SheetJS 未加载，无法解析 Excel：' + file.name + '（请联网后刷新，或改用 csv/txt）', null); return; }
+    var r = new FileReader();
+    r.onload = function (e) {
+      try {
+        var wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+        if (!wb.SheetNames || !wb.SheetNames.length) { cb('Excel 无工作表：' + file.name, null); return; }
+        var ws = wb.Sheets[wb.SheetNames[0]];
+        finish(XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false }));
+      } catch (err) { cb('Excel 解析失败(' + file.name + ')：' + (err && err.message ? err.message : err), null); }
+    };
+    r.onerror = function () { cb('文件读取失败：' + file.name, null); };
+    r.readAsArrayBuffer(file);
+    return;
+  }
+  if (/\.csv$/.test(name)) {
+    var r2 = new FileReader();
+    r2.onload = function (e) {
+      var text = String(e.target.result == null ? '' : e.target.result);
+      if (xlsxReady) {
+        try {
+          var wb = XLSX.read(text, { type: 'string' });
+          if (wb.SheetNames && wb.SheetNames.length) {
+            var ws = wb.Sheets[wb.SheetNames[0]];
+            finish(XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false }));
+            return;
+          }
+        } catch (err) { /* 落到手动解析 */ }
+      }
+      finish(parseCSVText(text));
+    };
+    r2.onerror = function () { cb('文件读取失败：' + file.name, null); };
+    r2.readAsText(file);
+    return;
+  }
+  // txt：每行一个词组，视为单列表头「关键词」
+  var r3 = new FileReader();
+  r3.onload = function (e) {
+    var lines = String(e.target.result == null ? '' : e.target.result).split(/\r?\n/);
+    var rows = [['关键词']];
+    for (var i = 0; i < lines.length; i++) { var t = lines[i].trim(); if (t) rows.push([t]); }
+    finish(rows);
+  };
+  r3.onerror = function () { cb('文件读取失败：' + file.name, null); };
+  r3.readAsText(file);
+}
+
+function readAllCompetitorFiles(fileList, cb) {
+  var files = Array.prototype.slice.call(fileList);
+  if (files.length === 0) { cb(null, []); return; }
+  var results = [], pending = files.length, aborted = false;
+  files.forEach(function (file) {
+    readOneTableFile(file, function (err, data) {
+      if (aborted) return;
+      if (err) { aborted = true; cb(err, null); return; }
+      results.push(data);
+      if (--pending === 0) cb(null, results);
+    });
+  });
+}
+
+/** 多文件合并（规格 §3.2）：逐文件解析 → 自动识别 → 按词组聚合，不去重只标记 */
+function compDoMerge(parsedList) {
+  var baseHeaders = [], firstColumnMap = null, baseSet = false;
+  var merged = [], baseRows = [], byKw = {}, skipped = [];
+  for (var fi = 0; fi < parsedList.length; fi++) {
+    var pf = parsedList[fi];
+    var headers = pf.headers, rows = pf.rows;
+    var cm = autoMatchColumns(headers);
+    if (cm.phrase < 0) { skipped.push(pf.name); continue; }
+    if (!baseSet) { baseHeaders = headers.slice(); firstColumnMap = cm; baseSet = true; baseRows.push(headers.slice()); }
+    for (var ri = 1; ri < rows.length; ri++) {
+      var row = rows[ri];
+      if (!row || row.length === 0) continue;
+      var kwRaw = (row[cm.phrase] == null ? '' : row[cm.phrase]);
+      var text = String(kwRaw).trim();
+      if (!text) continue;
+      var kw = mergeKeyNorm(text);
+      var sv = numOrNull(cm.searchVolume >= 0 ? row[cm.searchVolume] : null);
+      var nr = numOrNull(cm.naturalRank >= 0 ? row[cm.naturalRank] : null);
+      var cc = numOrNull(cm.competitorCount >= 0 ? row[cm.competitorCount] : null);
+      var cpr = numOrNull(cm.cpr >= 0 ? row[cm.cpr] : null);
+      var rawRow = alignRowToBase(row, headers, baseHeaders);
+      var meta = byKw[kw];
+      if (!meta) { meta = { count: 0, count80: 0, fileSet: {}, bestSv: null, bestNr: null }; byKw[kw] = meta; }
+      meta.count++;
+      if (nr != null && nr > 0 && nr <= 80) meta.count80++;
+      meta.fileSet[pf.name] = true;
+      if (sv != null && (meta.bestSv == null || sv > meta.bestSv)) meta.bestSv = sv;
+      if (nr != null && (meta.bestNr == null || nr < meta.bestNr)) meta.bestNr = nr;
+      merged.push({ kw: kw, text: text, sv: sv, cc: cc, cpr: cpr, nr: nr, sources: [pf.name], rawRow: rawRow, file: pf.name });
+    }
+  }
+  if (!baseSet || merged.length === 0) {
+    alert('没有可合并的数据（可能所有文件都缺少「关键词词组」列，或文件为空）。' + (skipped.length ? '\n已跳过：' + skipped.join(', ') : ''));
+    return;
+  }
+  // 附上跨文件聚合结果
+  for (var m = 0; m < merged.length; m++) {
+    var meta2 = byKw[merged[m].kw];
+    merged[m].repeatCount = meta2.count;
+    merged[m].repeatCount80 = meta2.count80;
+    merged[m].sources = Object.keys(meta2.fileSet);
+    merged[m].isDuplicate = meta2.count > 1;
+  }
+  // competitor 路径排序：bestSv 降序 → bestNr 升序（同词组相邻）
+  merged.sort(function (a, b) {
+    var sa = byKw[a.kw].bestSv, sb = byKw[b.kw].bestSv;
+    var va = (sa == null ? -1 : sa), vb = (sb == null ? -1 : sb);
+    if (va !== vb) return vb - va;
+    var na = byKw[a.kw].bestNr, nb = byKw[b.kw].bestNr;
+    var ua = (na == null ? Infinity : na), ub = (nb == null ? Infinity : nb);
+    return ua - ub;
+  });
+  for (var m2 = 0; m2 < merged.length; m2++) baseRows.push(merged[m2].rawRow);
+
+  compState.rows = baseRows;
+  compState.merged = merged;
+  compState.headers = baseHeaders.slice();
+  compState.firstColumnMap = firstColumnMap;
+  compState.firstHeaders = baseHeaders.slice();
+  compState.columnMap = (firstColumnMap || {});
+
+  var note = document.getElementById('compNote');
+  if (note) {
+    note.style.display = 'block';
+    note.textContent = '已识别 ' + parsedList.length + ' 个文件（' + (skipped.length ? '跳过 ' + skipped.length + ' 个缺关键词列的文件；' : '') + '共 ' + merged.length + ' 行）。请确认下列映射，点「确认并解析」写入工作数据集。';
+  }
+  // 复用既有列映射弹窗（竞品字段集）
+  openColMapModal(compState.rows, compState.headers, firstColumnMap, COMP_FIELDS, 'competitor');
+}
+
+/** 竞品列映射确认（规格 §3.3 单文件手动路径）：按用户映射重建数据集后重算重复次数 */
+function confirmCompetitorColMap() {
+  var selects = document.querySelectorAll('#colMapRows select');
+  var confirmed = {};
+  for (var i = 0; i < selects.length; i++) {
+    var v = selects[i].value;
+    if (v) confirmed[v] = parseInt(selects[i].getAttribute('data-col'), 10);
+  }
+  if (confirmed.phrase == null) {
+    alert('「关键词词组」为必填列，请在下拉框中指定哪一列是关键词词组。');
+    return;
+  }
+  var rows = _colMapRows;
+  var list = [];
+  for (var j = 1; j < rows.length; j++) {
+    var row = rows[j];
+    if (!row) continue;
+    var text = String(row[confirmed.phrase] == null ? '' : row[confirmed.phrase]).trim();
+    if (!text) continue;
+    var p = {
+      id: 0, text: text,
+      searchVolume: numOrNull(confirmed.searchVolume >= 0 ? row[confirmed.searchVolume] : null),
+      searchTrend: numOrNull(confirmed.searchTrend >= 0 ? row[confirmed.searchTrend] : null),
+      competitorCount: numOrNull(confirmed.competitorCount >= 0 ? row[confirmed.competitorCount] : null),
+      cpr: numOrNull(confirmed.cpr >= 0 ? row[confirmed.cpr] : null),
+      adRank: 0,
+      naturalRank: numOrNull(confirmed.naturalRank >= 0 ? row[confirmed.naturalRank] : null),
+      searchFreqRank: numOrNull(confirmed.searchFreqRank >= 0 ? row[confirmed.searchFreqRank] : null),
+      rankChange: numOrNull(confirmed.rankChange >= 0 ? row[confirmed.rankChange] : null),
+      repeat: 0, tags: [], hitDetail: [],
+      repeatCount: 0, repeatCount80: 0, repeatRatio80: 0, sources: [], isDuplicate: false, _rawRow: []
+    };
+    var mi = j - 1;
+    if (compState.merged && compState.merged[mi]) p.sources = (compState.merged[mi].sources || []).slice();
+    if (compState.rows && compState.rows[j]) p._rawRow = compState.rows[j].slice();
+    list.push(p);
+  }
+  if (list.length === 0) { alert('未解析到任何词组：所选「关键词词组」列在所有数据行中都是空的。'); return; }
+  recomputeRepeatCounts(list);
+  for (var x = 0; x < list.length; x++) {
+    list[x].isDuplicate = list[x].repeatCount > 1;
+    list[x].repeat = list[x].repeatCount;   // 复用既有「重复」列展示出现次数
+  }
+  compState.columnMap = confirmed;
+  compState.headers = (rows[0] || []).slice();
+  compState.rawData = compState.rows;
+
+  applyCompetitorDataset(list);
+
+  var note = document.getElementById('compNote');
+  if (note) {
+    var files = {};
+    for (var f = 0; f < (compState.merged || []).length; f++) files[compState.merged[f].file] = true;
+    note.innerHTML = '✅ 已合并 <b>' + list.length + '</b> 行（跨 <b>' + Object.keys(files).length + '</b> 个文件来源，'
+      + '<b>未去重只标记重复</b>）。可点「解析词组」做年份替换与精简列，或直接点顶部「开始计算」打标。';
+  }
+  closeColMapModal();
+}
+
+/** 把竞品数据集写入统一 phrases 工作数据集（不去重，仅编号） */
+function applyCompetitorDataset(list) {
+  reindexPhrases(list);
+  phrases = list;
+  var ta = document.getElementById('phraseInput');
+  if (ta) ta.value = '';   // 清空文本框，避免误点「① 解析词组」把扩展字段冲掉
+  updatePhraseUI();
+  var c = document.getElementById('compRowCount');
+  if (c) c.textContent = list.length;
+  var info = document.getElementById('importInfo');
+  if (info) info.textContent = '';
+  resetResultsState();
+}
+
+/** 重复次数核心算法（规格 §3.6）：按小写词组计数，count80 仅 0<nr<=80 */
+function recomputeRepeatCounts(list) {
+  var m = Object.create(null);
+  for (var i = 0; i < list.length; i++) {
+    var k = mergeKeyNorm(list[i].text);
+    if (!k) continue;
+    var meta = m[k];
+    if (!meta) { meta = { count: 0, count80: 0 }; m[k] = meta; }
+    meta.count++;
+    var nr = list[i].naturalRank;
+    if (nr != null && !isNaN(nr) && nr > 0 && nr <= 80) meta.count80++;
+  }
+  for (var j = 0; j < list.length; j++) {
+    var k2 = mergeKeyNorm(list[j].text);
+    var mt = m[k2];
+    list[j].repeatCount = mt ? mt.count : 0;
+    list[j].repeatCount80 = mt ? mt.count80 : 0;
+    // 80重复比：自然排名≤80 次数 / 重复次数；重复次数≤1 视为无重复，比值记为 0
+    list[j].repeatRatio80 = (mt && mt.count > 1) ? (mt.count80 / mt.count) : 0;
+  }
+}
+
+/** 解析词组（规格 §3.4）：① 年份替换 ② 重算重复次数 ③ 仅留系统列 */
+function parseImportedKeywords() {
+  if (!compState.headers || compState.headers.length === 0) {
+    alert('请先通过「竞品词批量导入合并」选择文件并确认列映射。');
+    return;
+  }
+  if (!phrases.length) { alert('当前没有可解析的词组数据。'); return; }
+  var targetYear = getReplaceYear();
+  var yearPattern = /\b(19|20)\d{2}\b/g;
+  var cm = compState.columnMap;
+  var replaced = 0;
+  if (cm && cm.phrase >= 0) {
+    for (var i = 0; i < phrases.length; i++) {
+      var p = phrases[i];
+      if (p.text == null) continue;
+      p.text = p.text.replace(yearPattern, function (mt) {
+        if (mt === String(targetYear)) return mt;   // 已是目标年则跳过不计数
+        replaced++;
+        return String(targetYear);
+      });
+      if (p._rawRow && cm.phrase < p._rawRow.length) p._rawRow[cm.phrase] = p.text; // 同步回原始行
+    }
+  }
+  recomputeRepeatCounts(phrases);
+
+  // ③ 删除无关列，仅保留系统识别列 + 来源文件
+  var defs = [
+    { key: 'phrase', name: '关键词词组', prop: 'text' },
+    { key: 'searchVolume', name: '搜索量', prop: 'searchVolume' },
+    { key: 'searchTrend', name: '搜索量趋势', prop: 'searchTrend' },
+    { key: 'competitorCount', name: '竞品数', prop: 'competitorCount' },
+    { key: 'cpr', name: 'CPR', prop: 'cpr' },
+    { key: 'naturalRank', name: '自然排名', prop: 'naturalRank' },
+    { key: 'searchFreqRank', name: '搜索频率排名', prop: 'searchFreqRank' },
+    { key: 'rankChange', name: '排名变化', prop: 'rankChange' },
+    { key: 'isDuplicate', name: '重复', prop: 'isDuplicate' }
+  ];
+  var keep = [];
+  for (var d = 0; d < defs.length; d++) { if (cm[defs[d].key] != null && cm[defs[d].key] >= 0) keep.push(defs[d]); }
+  var hasSources = false;
+  for (var s = 0; s < phrases.length; s++) { if (phrases[s].sources && phrases[s].sources.length) { hasSources = true; break; } }
+  if (hasSources) keep.push({ key: '__sources', name: '来源文件', prop: '__sources' });
+
+  var newHeaders = [], fieldToIdx = {}, newMap = {};
+  for (var kk = 0; kk < keep.length; kk++) { fieldToIdx[keep[kk].key] = kk; newHeaders.push(keep[kk].name); newMap[keep[kk].key] = kk; }
+
+  var newRawRows = [];
+  for (var pi = 0; pi < phrases.length; pi++) {
+    var ph = phrases[pi];
+    var nr = new Array(keep.length);
+    for (var k2 = 0; k2 < keep.length; k2++) {
+      var def = keep[k2];
+      if (def.key === '__sources') nr[k2] = (ph.sources || []).join(', ');
+      else if (def.key === 'phrase') nr[k2] = ph.text;
+      else if (def.key === 'isDuplicate') nr[k2] = ph.isDuplicate ? '是' : '否';
+      else nr[k2] = ph[def.prop];
+    }
+    newRawRows.push(nr);
+    ph._rawRow = nr;
+  }
+  compState.headers = newHeaders;
+  compState.columnMap = newMap;
+  compState.rawData = [newHeaders].concat(newRawRows);
+
+  updatePhraseUI();
+  var note = document.getElementById('compNote');
+  if (note) {
+    note.innerHTML = '✅ 解析完成：替换 <b>' + replaced + '</b> 处年份为 <b>' + targetYear + '</b>；已重算重复次数并精简为系统列。当前工作数据集 <b>' + phrases.length + '</b> 行。';
+  }
+}
+
+/** 导出合并过程表（规格 §3.5）：固定前缀表头 + 透传精简后的系统列 */
+function exportMergedCompetitor() {
+  if (!phrases.length) { alert('没有可导出的数据。请先通过「竞品词批量导入合并」载入文件。'); return; }
+  if (typeof XLSX === 'undefined' || !XLSX || !XLSX.utils || !XLSX.writeFile) {
+    alert('SheetJS 未加载，无法导出 xlsx。请联网后刷新重试（合并与导入 txt/csv 仍可用）。');
+    return;
+  }
+  var aoa = [];
+  var header = ['序号', '关键词', '搜索量', '自然排名', '重复次数', '80重复次数', '80重复比', '来源文件'];
+  var transHeaders = compState.headers || [];
+  header = header.concat(transHeaders);
+  aoa.push(header);
+  for (var i = 0; i < phrases.length; i++) {
+    var p = phrases[i];
+    var row = [
+      i + 1, p.text,
+      fmtNum(p.searchVolume), fmtNum(p.naturalRank),
+      fmtNum(p.repeatCount), fmtNum(p.repeatCount80), fmtPct(p.repeatRatio80),
+      (p.sources || []).join(', ')
+    ];
+    var raw = p._rawRow || [];
+    for (var c = 0; c < transHeaders.length; c++) row.push(raw[c] !== undefined ? raw[c] : '');
+    aoa.push(row);
+  }
+  var ws = XLSX.utils.aoa_to_sheet(aoa);
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '合并过程');
+  XLSX.writeFile(wb, '竞品合并过程_' + dateStamp() + '.xlsx');
+}
+
+/** 年份替换目标年：localStorage 持久化（1900-2099，默认 2026） */
+function getReplaceYear() {
+  var y = parseInt(localStorage.getItem(LS_REPLACE_YEAR) || '', 10);
+  if (isNaN(y) || y < 1900 || y > 2099) y = 2026;
+  return y;
+}
+function setReplaceYear(y) {
+  y = parseInt(y, 10);
+  if (isNaN(y) || y < 1900 || y > 2099) { alert('目标年需在 1900-2099 之间。'); return false; }
+  try { localStorage.setItem(LS_REPLACE_YEAR, String(y)); } catch (e) { /* 忽略 */ }
+  return true;
+}
+
+/** 数值显示：null/undefined → 空串（标准路径值为数字，行为不变） */
+function fmtNum(v) { return (v === null || v === undefined) ? '' : v; }
+/** 比值转百分比展示：0.5 → 50.0%；null/NaN → — */
+function fmtPct(x) {
+  if (x == null || isNaN(x)) return '—';
+  return (Math.round(x * 1000) / 10).toFixed(1) + '%';
+}
+
+/* ---------- 竞品面板 UI 交互 ---------- */
+function compPickFiles() {
+  var el = document.getElementById('compFileInput');
+  if (el) el.click();
+}
+function compHandleFiles(event) {
+  if (!event || !event.target) return;
+  var files = Array.prototype.slice.call(event.target.files || []);
+  event.target.value = '';   // 必须在快照 files 之后清空，否则活动 FileList 被同步清空
+  if (!files.length) return;
+  var note = document.getElementById('compNote');
+  if (note) { note.style.display = 'block'; note.textContent = '正在解析 ' + files.length + ' 个文件…'; }
+  readAllCompetitorFiles(files, function (err, parsed) {
+    if (err) {
+      if (note) { note.style.display = 'block'; note.textContent = '⚠️ ' + err; }
+      return;
+    }
+    compDoMerge(parsed);
+  });
+}
+function compParseClick() {
+  var yEl = document.getElementById('compTargetYear');
+  if (yEl && !setReplaceYear(yEl.value)) return;
+  parseImportedKeywords();
 }
 
 /* ============================================================
@@ -1997,11 +2555,22 @@ function onSearchInput() {
   renderTable();
 }
 
+function onMinRepeatInput() {
+  var el = document.getElementById('minRepeatInput');
+  var v = el ? parseInt(el.value, 10) : 0;
+  filterState.minRepeat = (isNaN(v) || v < 0) ? 0 : v;
+  currentPage = 1;
+  renderTable();
+}
+
 function clearFilters() {
   filterState.search = '';
   filterState.untaggedOnly = false;
   filterState.tags = [];
   filterState.logic = 'OR';
+  filterState.minRepeat = 0;
+  var mr = document.getElementById('minRepeatInput');
+  if (mr) mr.value = '';
   var sb = document.getElementById('searchBox');
   if (sb) sb.value = '';
   var b = document.getElementById('btnLogic');
@@ -2032,6 +2601,7 @@ function getFiltered() {
       }
       if (!ok) continue;
     }
+    if (filterState.minRepeat && (p.repeatCount || 0) < filterState.minRepeat) continue;
     out.push(p);
   }
   var key = sortState.key;
@@ -2050,10 +2620,11 @@ function getFiltered() {
  * 【区块 6】表格渲染 / 分页 / 排序
  * ============================================================ */
 
-var SORT_KEYS = ['id', 'searchVolume', 'competitorCount', 'cpr', 'adRank', 'naturalRank', 'repeat'];
+var SORT_KEYS = ['id', 'searchVolume', 'competitorCount', 'cpr', 'adRank', 'naturalRank', 'repeat', 'repeatCount', 'repeatCount80', 'repeatRatio80', 'isDuplicate'];
 var SORT_LABELS = {
   id: '序号', searchVolume: '搜索量', competitorCount: '竞品数',
-  cpr: 'CPR', adRank: '广告排名', naturalRank: '自然排名', repeat: '重复'
+  cpr: 'CPR', adRank: '广告排名', naturalRank: '自然排名', repeat: '重复',
+  repeatCount: '重复次数', repeatCount80: '80重复次数', repeatRatio80: '80重复比', isDuplicate: '是否重复'
 };
 
 function sortBy(key) {
@@ -2098,7 +2669,7 @@ function renderTable() {
     var msg = phrases.length === 0
       ? '暂无数据 —— 请先导入词组并点击「开始计算」'
       : (hasComputed ? '当前筛选条件下没有匹配的词组' : '词组已导入，点击「▶ 开始计算」生成标签');
-    body.innerHTML = '<tr><td colspan="10" style="text-align:center; color:var(--text-muted); padding:26px;">' + msg + '</td></tr>';
+    body.innerHTML = '<tr><td colspan="15" style="text-align:center; color:var(--text-muted); padding:26px;">' + msg + '</td></tr>';
     return;
   }
 
@@ -2133,12 +2704,17 @@ function renderTable() {
       '<td class="kw">' + escapeHtml(p.text) + '</td>' +
       '<td>' + tagHtml + '</td>' +
       '<td>' + detHtml + '</td>' +
-      '<td class="num">' + p.searchVolume + '</td>' +
-      '<td class="num">' + p.competitorCount + '</td>' +
-      '<td class="num">' + p.cpr + '</td>' +
-      '<td class="num">' + p.adRank + '</td>' +
-      '<td class="num">' + p.naturalRank + '</td>' +
-      '<td class="num">' + p.repeat + '</td>' +
+      '<td class="num">' + fmtNum(p.searchVolume) + '</td>' +
+      '<td class="num">' + fmtNum(p.competitorCount) + '</td>' +
+      '<td class="num">' + fmtNum(p.cpr) + '</td>' +
+      '<td class="num">' + fmtNum(p.adRank) + '</td>' +
+      '<td class="num">' + fmtNum(p.naturalRank) + '</td>' +
+      '<td class="num">' + fmtNum(p.repeat) + '</td>' +
+      '<td class="num">' + fmtNum(p.repeatCount) + '</td>' +
+      '<td class="num">' + fmtNum(p.repeatCount80) + '</td>' +
+      '<td class="num">' + fmtPct(p.repeatRatio80) + '</td>' +
+      '<td>' + (p.sources && p.sources.length ? escapeHtml(p.sources.join(', ')) : '—') + '</td>' +
+      '<td>' + (p.isDuplicate ? '是' : '否') + '</td>' +
       '</tr>'
     );
   }
@@ -2168,13 +2744,13 @@ function gotoLastPage() {
 function exportWide() {
   var list = getFiltered();
   if (list.length === 0) { alert('当前筛选结果为 0 条，没有可导出的数据。'); return; }
-  var head = ['序号', '词组', '搜索量', '竞品数', 'CPR', '广告排名', '自然排名', '重复'];
+  var head = ['序号', '词组', '搜索量', '竞品数', 'CPR', '广告排名', '自然排名', '重复', '重复次数', '80重复次数', '80重复比', '来源文件', '是否重复'];
   var i, j;
   for (i = 0; i < TAG_DATA.length; i++) head.push(TAG_DATA[i].name);
   var lines = [head.map(csvCell).join(',')];
   for (i = 0; i < list.length; i++) {
     var p = list[i];
-    var row = [p.id, p.text, p.searchVolume, p.competitorCount, p.cpr, p.adRank, p.naturalRank, p.repeat];
+    var row = [p.id, p.text, p.searchVolume, p.competitorCount, p.cpr, p.adRank, p.naturalRank, p.repeat, p.repeatCount, p.repeatCount80, p.repeatRatio80, (p.sources || []).join(' | '), p.isDuplicate ? '是' : '否'];
     for (j = 0; j < TAG_DATA.length; j++) {
       row.push(p.tags.indexOf(TAG_DATA[j].name) !== -1 ? 1 : 0);
     }
@@ -2186,14 +2762,14 @@ function exportWide() {
 function exportLong() {
   var list = getFiltered();
   if (list.length === 0) { alert('当前筛选结果为 0 条，没有可导出的数据。'); return; }
-  var head = ['序号', '词组', '标签', '命中明细', '搜索量', '竞品数', 'CPR', '广告排名', '自然排名', '重复'];
+  var head = ['序号', '词组', '标签', '命中明细', '搜索量', '竞品数', 'CPR', '广告排名', '自然排名', '重复', '重复次数', '80重复次数', '80重复比', '来源文件', '是否重复'];
   var lines = [head.map(csvCell).join(',')];
   for (var i = 0; i < list.length; i++) {
     var p = list[i];
     var parts = [];
     for (var d = 0; d < p.hitDetail.length; d++) parts.push(p.hitDetail[d].cat + '←' + p.hitDetail[d].word);
     var row = [p.id, p.text, p.tags.join(','), parts.join(', '),
-      p.searchVolume, p.competitorCount, p.cpr, p.adRank, p.naturalRank, p.repeat];
+      p.searchVolume, p.competitorCount, p.cpr, p.adRank, p.naturalRank, p.repeat, p.repeatCount, p.repeatCount80, p.repeatRatio80, (p.sources || []).join(' | '), p.isDuplicate ? '是' : '否'];
     lines.push(row.map(csvCell).join(','));
   }
   downloadBlob('关键词标签_长表_' + dateStamp() + '.csv', '\ufeff' + lines.join('\r\n'), 'text/csv;charset=utf-8;');
@@ -2330,6 +2906,8 @@ function init() {
   checkXlsx();
   loadTags();
   loadOpts();
+  var ty = document.getElementById('compTargetYear');
+  if (ty) ty.value = getReplaceYear();
   renderTagCats();
   renderFilterChips();
   renderStats();
