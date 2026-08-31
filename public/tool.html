@@ -394,6 +394,7 @@ td.kw { min-width: 220px; max-width: 420px; word-break: break-word; }
       <span id="exportHint" class="hint">将导出当前筛选的 0 条</span>
       <button class="btn" onclick="exportWide()">⬇ 导出宽表 CSV</button>
       <button class="btn" onclick="exportLong()">⬇ 导出长表 CSV</button>
+      <button class="btn" onclick="exportTagHitTable()">⬇ 导出标签命中表 CSV</button>
     </div>
   </div>
   <div class="card-b">
@@ -493,7 +494,7 @@ td.kw { min-width: 220px; max-width: 420px; word-break: break-word; }
         <li><b>①A 竞品词批量导入合并（多文件）</b>：点「①B 竞品词批量导入合并」→「📁 选择文件 (多文件)」选 H10 Cerebro / AMZ123 等导出的多个 xlsx/csv/txt。系统按「关键词词组」列自动合并<b>不去重</b>，只标记重复（重复次数 / 是否重复 / 来源文件）；自然排名 ≤80 的出现次数记作「80重复次数」，其与重复次数的比值记作「80重复比」（若该词组只出现 1 次则比值记为 0）。弹窗确认列映射后可直接「解析词组」做<b>年份归一</b>（默认目标年 2026，可在卡片内修改），再进入第③步打标。</li>
         <li><b>①B 普通导入词组（单文件）</b>：粘贴文本（每行一个）或导入单个 txt / xlsx / xls。Excel 会弹出列映射窗口，确认「关键词词组」列即可；搜索量、竞品数、CPR、广告排名、自然排名、重复 会自动识别中英文表头，未识别的按 0 处理。导入后按词组文本小写自动去重，保留第一条。（该路径无跨文件重复统计，「80重复比」「80重复率」列显示「—」表示不适用。）</li>
         <li><b>② 维护标签词库</b>：左侧选分类，右侧编辑词条（每行一个），改完点「保存词条」。可增删分类、改名、改色、停用、写备注。</li>
-        <li><b>③ 开始计算</b>：点「开始计算」，分批处理并显示进度，可随时停止。计算完在下方表格查看结果，并可按标签 / 关键词 / 未打标筛选，最后导出 CSV。</li>
+        <li><b>③ 开始计算</b>：点「开始计算」，分批处理并显示进度，可随时停止。计算完在下方表格查看结果，并可按标签 / 关键词 / 未打标筛选，最后导出 CSV：「宽表」每行一词组并附各分类 0/1 标记；「长表」每行一词组并附命中明细；「标签命中表」以分类为列、下列出命中该分类的所有词组。</li>
       </ul>
 
       <h4>三种匹配模式的区别与风险</h4>
@@ -2782,6 +2783,41 @@ function exportLong() {
     lines.push(row.map(csvCell).join(','));
   }
   downloadBlob('关键词标签_长表_' + dateStamp() + '.csv', '\ufeff' + lines.join('\r\n'), 'text/csv;charset=utf-8;');
+}
+
+/** 导出「分类标签命中表」CSV：列名=各分类标签名，下方为命中该分类的词组 */
+function exportTagHitTable() {
+  var list = getFiltered();
+  if (list.length === 0) { alert('当前筛选结果为 0 条，没有可导出的数据。'); return; }
+  var cols = [];
+  var maxLen = 0;
+  var i, r;
+  for (i = 0; i < TAG_DATA.length; i++) {
+    var catName = TAG_DATA[i].name;
+    var seen = {};
+    var phrases = [];
+    for (r = 0; r < list.length; r++) {
+      var p = list[r];
+      if (p.tags.indexOf(catName) !== -1) {
+        var txt = p.text;
+        if (!seen[txt]) {
+          seen[txt] = true;
+          phrases.push(txt);
+        }
+      }
+    }
+    cols.push(phrases);
+    if (phrases.length > maxLen) maxLen = phrases.length;
+  }
+  var head = [];
+  for (i = 0; i < TAG_DATA.length; i++) head.push(TAG_DATA[i].name);
+  var lines = [head.map(csvCell).join(',')];
+  for (r = 0; r < maxLen; r++) {
+    var row = [];
+    for (i = 0; i < cols.length; i++) row.push(cols[i][r] || '');
+    lines.push(row.map(csvCell).join(','));
+  }
+  downloadBlob('关键词标签_分类命中表_' + dateStamp() + '.csv', '\ufeff' + lines.join('\r\n'), 'text/csv;charset=utf-8;');
 }
 
 /* ============================================================
